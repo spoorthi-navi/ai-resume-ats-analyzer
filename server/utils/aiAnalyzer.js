@@ -34,30 +34,50 @@ ${resumeText}
 Job Description:
 ${jobDescription}
 `;
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 export const analyzeWithGemini = async (resumeText, jobDescription) => {
   try {
     if (!process.env.GEMINI_API_KEY) {
       throw new Error('GEMINI_API_KEY is undefined');
     }
 
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: buildPrompt(resumeText, jobDescription) }] }],
-          generationConfig: { temperature: 0.2 }
-        })
+    const models = ['gemini-3.6-flash', 'gemini-flash-latest'];
+    let rawText = null;
+
+    for (let m = 0; m < models.length; m++) {
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        const response = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${models[m]}:generateContent?key=${process.env.GEMINI_API_KEY}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: buildPrompt(resumeText, jobDescription) }] }],
+              generationConfig: { temperature: 0.2 }
+            })
+          }
+        );
+
+        const data = await response.json();
+        rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+
+        if (rawText) {
+          break;
+        }
+
+        console.error('Gemini failed:', models[m], 'attempt', attempt, JSON.stringify(data));
+        await sleep(2000);
       }
-    );
 
-    const data = await response.json();
-    const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (rawText) {
+        break;
+      }
+    }
 
-        if (!rawText) {
-      console.error('Gemini response:', JSON.stringify(data));
-      throw new Error('Empty Gemini response');
+    if (!rawText) {
+      throw new Error('Gemini unavailable after retries');
     }
 
     try {
@@ -68,7 +88,7 @@ export const analyzeWithGemini = async (resumeText, jobDescription) => {
     } catch {
       return { analysis: rawText };
     }
-    } catch (err) {
+  } catch (err) {
     console.error('Gemini error:', err.message);
     return { error: err.message };
   }
