@@ -55,7 +55,8 @@ export const analyzeWithGemini = async (resumeText, jobDescription) => {
     const data = await response.json();
     const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
 
-    if (!rawText) {
+        if (!rawText) {
+      console.error('Gemini response:', JSON.stringify(data));
       throw new Error('Empty Gemini response');
     }
 
@@ -67,7 +68,8 @@ export const analyzeWithGemini = async (resumeText, jobDescription) => {
     } catch {
       return { analysis: rawText };
     }
-  } catch (err) {
+    } catch (err) {
+    console.error('Gemini error:', err.message);
     return { error: err.message };
   }
 };
