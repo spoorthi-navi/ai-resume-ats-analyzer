@@ -35,19 +35,17 @@ Job Description:
 ${jobDescription}
 `;
 
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
 export const analyzeWithGemini = async (resumeText, jobDescription) => {
   try {
     if (!process.env.GEMINI_API_KEY) {
       throw new Error('GEMINI_API_KEY is undefined');
     }
 
-    const models = ['gemini-3.6-flash', 'gemini-flash-latest'];
+    const models = ['gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-2.5-flash'];
     let rawText = null;
 
     for (let m = 0; m < models.length; m++) {
-      for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
         const response = await fetch(
           `https://generativelanguage.googleapis.com/v1beta/models/${models[m]}:generateContent?key=${process.env.GEMINI_API_KEY}`,
           {
@@ -56,7 +54,8 @@ export const analyzeWithGemini = async (resumeText, jobDescription) => {
             body: JSON.stringify({
               contents: [{ parts: [{ text: buildPrompt(resumeText, jobDescription) }] }],
               generationConfig: { temperature: 0.2 }
-            })
+            }),
+            signal: AbortSignal.timeout(25000)
           }
         );
 
@@ -67,17 +66,14 @@ export const analyzeWithGemini = async (resumeText, jobDescription) => {
           break;
         }
 
-        console.error('Gemini failed:', models[m], 'attempt', attempt, JSON.stringify(data));
-        await sleep(2000);
-      }
-
-      if (rawText) {
-        break;
+        console.error('Gemini failed:', models[m], JSON.stringify(data));
+      } catch (innerErr) {
+        console.error('Gemini request error:', models[m], innerErr.message);
       }
     }
 
     if (!rawText) {
-      throw new Error('Gemini unavailable after retries');
+      throw new Error('Gemini unavailable, please try again in a minute');
     }
 
     try {
